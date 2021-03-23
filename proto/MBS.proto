@@ -1,0 +1,6 @@
+[proto]
+
+num_streams=int
+tdnnf_bttlnck= int
+tdnnf_out = int_list
+tdnnf_dilations = str_list
