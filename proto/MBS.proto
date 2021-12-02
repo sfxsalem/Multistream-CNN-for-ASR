@@ -7,7 +7,7 @@ ms_in_dim = int
 ms_out_dim = int
 ms_bttlnck_dim = int
 
-ms_context_size = int
-ms_dilations = str
-ms_paddings = str
+ms_context_size = int_list
+ms_dilations = str_list
+ms_paddings = str_list
 num_layers = int

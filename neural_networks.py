@@ -155,7 +155,7 @@ class MultiStreamBlock(nn.Module):
         self.ms_out_dim = int(options["ms_out_dim"]) #512
         self.ms_bttlnck_dim = int(options["ms_bttlnck_dim"]) #128
 
-        self.ms_context_size = int(options["ms_context_size"]) or list(ast.literal_eval(options["ms_context_size"]))
+        self.ms_context_size = list(ast.literal_eval(options["ms_context_size"]))
         self.ms_dilations = list(ast.literal_eval(options["ms_dilations"]))
         self.ms_paddings = list(ast.literal_eval(options["ms_paddings"]))
 
@@ -203,10 +203,6 @@ class MultiStreamBlock(nn.Module):
         h = self.sp01(h)
         h = self.dense02(h)
 
-        #h = self.dropout(self.bn(self.relu(x.transpose(1, 2)))).transpose(1, 2)
-        #h = self.dense01(h)
-        #h = self.sp01(h)
-        #h = self.dense02(h)
         return h
     
     def step_mbs_layers(self):
@@ -235,16 +231,12 @@ class SingleStream(nn.Module):
         
     def forward(self, x):
 
-        #batch = x.shape[0]
-        #seq_len = x.shape[1]
-        #x = x.view(batch, 1, seq_len)
         x = self.layer01(x)
         x = self.layer02(x)
         x = self.layer03(x)
         x = self.layer04(x)
         x = self.layer05(x)
 
-        #x = x.reshape(batch, -1)
         return x
 
     def step_ftdnn_layers(self):
@@ -292,14 +284,9 @@ class MultiStream(nn.Module):
 
     def forward(self, x):
 
-        #batch = x.shape[0]
-        #seq_len = x.shape[1]
-        #x = x.view(batch, 1, seq_len)
-
         for layer in self.layers:
             x = layer(x)
-        
-        #x = x.reshape(batch, -1)
+
         return x
 
     def step_ftdnn_layers(self):
