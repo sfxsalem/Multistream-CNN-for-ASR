@@ -637,8 +637,11 @@ def run_nn(
                 if not (strtobool(config[arch_dict[opt][0]]["arch_freeze"])):
                     optimizers[opt].step()
 
-            for net in nns.keys():
-                nns[net].step_mbs_layers()
+            #for net in nns.keys():
+            #   if multi_gpu:
+            #       nns[net].module.step_mbs_layers()
+            #   else:
+            #       nns[net].step_mbs_layers()
             
         else:
             with torch.no_grad():  # Forward input without autograd graph (save memory)

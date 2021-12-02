@@ -100,7 +100,6 @@ class SOrthConv(nn.Module):
             update = P - (torch.matrix_power(P, 0) * scale2)
             return torch.norm(update, p='fro')
 
-
 class SharedDimScaleDropout(nn.Module):
     def __init__(self, alpha: float = 0.5, dim=1):
         '''
@@ -234,7 +233,6 @@ class FTDNNLayer(nn.Module):
             update = P - (torch.matrix_power(P, 0) * scale2)
             return torch.norm(update, p='fro')
 
-
 class DenseReLU(nn.Module):
     
     def __init__(self, in_dim, out_dim):
@@ -251,7 +249,6 @@ class DenseReLU(nn.Module):
         else:
             x = self.bn(x)
         return x
-
 
 class StatsPool(nn.Module):
 
@@ -270,130 +267,3 @@ class StatsPool(nn.Module):
         stds = torch.sqrt(torch.clamp(numerator, min=self.floor)/t)
         x = torch.cat([means, stds], dim=1)
         return x
-
-
-class TDNN(nn.Module):
-    
-    def __init__(
-                    self, 
-                    input_dim=23, 
-                    output_dim=512,
-                    context_size=5,
-                    stride=1,
-                    dilation=1,
-                    batch_norm=True,
-                    dropout_p=0.0,
-                    padding=0
-                ):
-        super(TDNN, self).__init__()
-        self.context_size = context_size
-        self.stride = stride
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.dilation = dilation
-        self.dropout_p = dropout_p
-        self.padding = padding
-        
-        self.kernel = nn.Conv1d(self.input_dim, 
-                                self.output_dim,
-                                self.context_size, 
-                                stride=self.stride, 
-                                padding=self.padding, 
-                                dilation=self.dilation)
-
-        self.nonlinearity = nn.LeakyReLU()
-        self.batch_norm = batch_norm
-        if batch_norm:
-            self.bn = nn.BatchNorm1d(output_dim)
-        self.drop = nn.Dropout(p=self.dropout_p)
-        
-    def forward(self, x):
-        '''
-        input: size (batch, seq_len, input_features)
-        outpu: size (batch, new_seq_len, output_features)
-        '''
-
-        _, _, d = x.shape
-        assert (d == self.input_dim), 'Input dimension was wrong. Expected ({}), got ({})'.format(self.input_dim, d)
-        
-        x = self.kernel(x.transpose(1,2))
-        x = self.nonlinearity(x)
-        x = self.drop(x)
-
-        if self.batch_norm:           
-            x = self.bn(x)
-        return x.transpose(1,2)
-
-class FTDNN(nn.Module):
-
-    def __init__(self, in_dim=30):
-        '''
-        The FTDNN architecture from
-        "State-of-the-art speaker recognition with neural network embeddings in 
-        NIST SRE18 and Speakers in the Wild evaluations"
-        https://www.sciencedirect.com/science/article/pii/S0885230819302700
-        '''
-        super(FTDNN, self).__init__()
-
-        self.layer01 = TDNN(input_dim=in_dim, output_dim=512,
-                            context_size=5, padding=2)
-        self.layer02 = FTDNNLayer(512, 1024, 256, context_size=2, dilations=[
-                                  2, 2, 2], paddings=[1, 1, 1])
-        self.layer03 = FTDNNLayer(1024, 1024, 256, context_size=1, dilations=[
-                                  1, 1, 1], paddings=[0, 0, 0])
-        self.layer04 = FTDNNLayer(1024, 1024, 256, context_size=2, dilations=[
-                                  3, 3, 2], paddings=[2, 1, 1])
-        self.layer05 = FTDNNLayer(2048, 1024, 256, context_size=1, dilations=[
-                                  1, 1, 1], paddings=[0, 0, 0])
-        self.layer06 = FTDNNLayer(1024, 1024, 256, context_size=2, dilations=[
-                                  3, 3, 2], paddings=[2, 1, 1])
-        self.layer07 = FTDNNLayer(3072, 1024, 256, context_size=2, dilations=[
-                                  3, 3, 2], paddings=[2, 1, 1])
-        self.layer08 = FTDNNLayer(1024, 1024, 256, context_size=2, dilations=[
-                                  3, 3, 2], paddings=[2, 1, 1])
-        self.layer09 = FTDNNLayer(3072, 1024, 256, context_size=1, dilations=[
-                                  1, 1, 1], paddings=[0, 0, 0])
-        self.layer10 = DenseReLU(1024, 2048)
-
-        self.layer11 = StatsPool()
-
-        self.layer12 = DenseReLU(4096, 512)
-
-    def forward(self, x):
-        '''
-        Input must be (batch_size, seq_len, in_dim)
-        '''
-        x = self.layer01(x)
-        x_2 = self.layer02(x)
-        x_3 = self.layer03(x_2)
-        x_4 = self.layer04(x_3)
-        skip_5 = torch.cat([x_4, x_3], dim=-1)
-        x = self.layer05(skip_5)
-        x_6 = self.layer06(x)
-        skip_7 = torch.cat([x_6, x_4, x_2], dim=-1)
-        x = self.layer07(skip_7)
-        x_8 = self.layer08(x)
-        skip_9 = torch.cat([x_8, x_6, x_4], dim=-1)
-        x = self.layer09(skip_9)
-        x = self.layer10(x)
-        x = self.layer11(x)
-        x = self.layer12(x)
-        return x
-
-    def step_ftdnn_layers(self):
-        for layer in self.children():
-            if isinstance(layer, FTDNNLayer):
-                layer.step_semi_orth()
-
-    def set_dropout_alpha(self, alpha):
-        for layer in self.children():
-            if isinstance(layer, FTDNNLayer):
-                layer.dropout.alpha = alpha
-
-    def get_orth_errors(self):
-        errors = 0.
-        with torch.no_grad():
-            for layer in self.children():
-                if isinstance(layer, FTDNNLayer):
-                    errors += layer.orth_error()
-        return errors
